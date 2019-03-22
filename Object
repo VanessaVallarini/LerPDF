@@ -1,0 +1,32 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace LerPDFTJPR
+{
+    public class DoPublicacaoTrecho
+    {
+        public int Pagina;
+        public string Texto;
+        public string Processo;
+
+        public DoPublicacaoTrecho(int i, string t)
+        {
+            this.Pagina = 0;
+            this.Texto = t;
+        }
+
+        public DoPublicacaoTrecho(int i, string t, string p)
+        {
+            this.Pagina = 0;
+            this.Texto = t;
+            this.Processo = p;
+        }
+
+        public DoPublicacaoTrecho()
+        {
+        }
+    }
+}
