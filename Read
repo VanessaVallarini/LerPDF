@@ -1,0 +1,147 @@
+using iTextSharp.text.pdf;
+using iTextSharp.text.pdf.parser;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+
+namespace LerPDFTJPR
+{
+    public class TJPR
+    {
+        public List<int> GetIndexByRegex(string texto, string regex)
+        {
+            MatchCollection result = Regex.Matches(texto, regex);
+            List<int> index = new List<int>();
+            for (int i = 0; i < result.Count; i++)
+            {
+                index.Add(result[i].Index);
+            }
+            return index;
+
+        }
+
+        public List<DoPublicacaoTrecho> GetTrechos(string texto, List<int> indexProtocolos, List<DoPublicacaoTrecho> trechos, List<string> listaEmpresa)
+        {
+            List<DoPublicacaoTrecho> retorno = new List<DoPublicacaoTrecho>();
+            try
+            {
+
+
+                for (int i = 1; i <= indexProtocolos.Count; i++)
+                {
+                    string trecho = string.Empty;
+
+                    if (i < indexProtocolos.Count - 1)
+                        trecho = texto.Substring(indexProtocolos[i], (indexProtocolos[i + 1] - indexProtocolos[i]) - 1);
+                    else
+                    {
+                        if (i == indexProtocolos.Count - 1)
+                            trecho = texto.Substring(indexProtocolos[i], texto.Length - indexProtocolos[i]);
+                    }
+                    
+
+                    Match idMateriaEnum = Regex.Match(trecho, @"IDMATERIA[0-9]{5,10}IDMATERIA");
+                    if (idMateriaEnum.Success)
+                    {
+                        trecho = trecho.Substring(0, idMateriaEnum.Index);
+                    }
+
+                    trecho = Regex.Replace(trecho, "\r\n", "");
+                    trecho = Regex.Replace(trecho, "\n", "").Trim();
+                    string resultEmpresa = string.Empty;
+                    if (trecho.Contains(listaEmpresa[0]) | trecho.Contains(listaEmpresa[1]))
+                    {
+                        resultEmpresa = trecho;
+                    }
+
+                    if (!string.IsNullOrEmpty(resultEmpresa))
+                    {
+                        string processo = string.Empty;
+
+                        Match indexPequeno = Regex.Match(trecho, @"[0-9]{4} . Processo: [0-9]{7}-[0-9]{1}|[0-9]{4} . Processo(\/)Prot: [0-9]{7}-[0-9]{1}|PROTOCOLO: [0-9]{12}");
+
+                        if (indexPequeno.Success)
+                        {
+                            processo = indexPequeno.Value;
+                            if (trecho.ToUpper().Contains("AÇÃO ORDINÁRIA"))
+                            {
+                                Match mProcesso = Regex.Match(trecho, @"[0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}");
+                                processo = mProcesso.Value;
+                            }
+                        }
+                        else
+                        {
+                            Match indexGrande = Regex.Match(trecho, @"[0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}");
+                            processo = indexGrande.Value;
+                        }
+                        if (processo != null)
+                        {
+                            retorno.Add(new DoPublicacaoTrecho()
+                            {
+                                Pagina = 1,
+                                Texto = trecho,
+                                Processo = ApenasNumeros(processo).PadLeft(25, '0'),
+                            });
+                        }
+                        
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+            return retorno;
+        }
+
+
+
+
+
+
+        public string ApenasNumeros(string texto)
+        {
+            return string.Join("", System.Text.RegularExpressions.Regex.Split(texto, @"[^\d]"));
+        }
+
+        public bool capturaPublicacao()
+        {
+            string caminho = "C:\\Users\\Vanessa\\Desktop\\Nova pasta\\19.pdf";
+            using (PdfReader reader = new PdfReader(caminho))
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                StringBuilder texto = new System.Text.StringBuilder();
+                List<DoPublicacaoTrecho> paginaTexto = new List<DoPublicacaoTrecho>();
+
+                for (int i = 1; i <= reader.NumberOfPages; i++)
+                {
+                    ITextExtractionStrategy its = new SimpleTextExtractionStrategy();
+                    string textoPagina = PdfTextExtractor.GetTextFromPage(reader, i, its);
+                    string textoRemover = "Diário Eletrônico do Tribunal de Justiça do Paraná";
+                    int indexRemover = textoPagina.ToUpper().IndexOf(textoRemover.ToUpper());
+                    if (indexRemover >= 0) textoPagina = textoPagina.Substring(indexRemover + textoRemover.Length);
+                    textoPagina = Regex.Replace(textoPagina, @"(\-\ [0-9]{1,4}\ \-)", "");
+
+                    DoPublicacaoTrecho trechoSujo = new DoPublicacaoTrecho();
+                    trechoSujo.Pagina = i;
+                    trechoSujo.Texto = textoPagina;
+                    paginaTexto.Add(trechoSujo);
+                    texto.Append(textoPagina);
+                }
+
+                List<int> indices = GetIndexByRegex(texto.ToString(), @"\n[0-9]{4} [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nProtocolo nº [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nPROTOCOLO Nº: [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nPROTOCOLO: [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nPROTOCOLO:[0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|PROTOCOLO Nº [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\n[0-9]{4} . Processo: [0-9]{7}-[0-9]{1}|\n[0-9]{4} - Processo Pje: Rvc [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\n[0-9]{4} . Processo(\/)Prot: [0-9]{7}-[0-9]{1}|\nPROTOCOLO: [0-9]{12}|\n[0-9]{1,4}. (.*)[0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nProcesso nº: [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nProcesso nº[0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nProcesso nº [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nPROCESSO Nº [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nProcesso: [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nAutos n.: [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nAutos nº [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nAutos nº. [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nAUTOS Nº [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nAutos: [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nAUTOS N[0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}|\nProcesso Crime n.º [0-9]{7}-[0-9]{2}.[0-9]{4}.[0-9]{1}.[0-9]{2}.[0-9]{4}");
+                List<string> listaEmpresa = new List<string>();
+                listaEmpresa.Add("Itau");
+                listaEmpresa.Add("Itaú");
+                List<DoPublicacaoTrecho> doPublicacaoTrechoes = GetTrechos(texto.ToString(), indices, paginaTexto, listaEmpresa);
+            }
+            return true;
+        }
+    }
+}
